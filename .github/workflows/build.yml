@@ -1,100 +1,178 @@
+name: Build events.json
 
-{\rtf1\ansi\ansicpg1252\cocoartf2867
-\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 .AppleSystemUIFontMonospaced-Regular;}
-{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
-{\*\expandedcolortbl;;\csgray\c0;}
-\margl1440\margr1440\vieww28520\viewh14720\viewkind0
-\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build.yml"
+  schedule:
+    - cron: "17 */6 * * *" # every 6 hours
 
-\f0\fs30 \cf2 <!doctype html>\
-<meta charset="utf-8" />\
-<title>BoutTime Events Builder</title>\
-<script>\
-(async () => \{\
-  // Edit these if you want\
-  const UFC_URL = "https://www.ufc.com/events#events-list-upcoming";\
-  const BOX_URL = "https://box.live/upcoming-fights-schedule/";\
-\
-  // Very simple parser helpers\
-  const clean = (s) => (s || "").replace(/\\s+/g," ").trim();\
-\
-  async function fetchText(url)\{\
-    const r = await fetch("https://r.jina.ai/" + url);\
-    if(!r.ok) throw new Error("Fetch failed " + r.status);\
-    return await r.text();\
-  \}\
-\
-  // UFC: grab lines that look like dates + event titles\
-  function parseUfc(text)\{\
-    // This is best-effort. UFC page changes sometimes.\
-    // We try to find \'93UFC\'94 titles and a nearby date like \'93Sat, Feb 21 / 10:00 PM\'94\
-    const out = [];\
-    const lines = text.split("\\n").map(clean).filter(Boolean);\
-    for (let i=0;i<lines.length;i++)\{\
-      const t = lines[i];\
-      if (!/ufc\\s*\\d+|ufc fight night|ufc on/i.test(t)) continue;\
-\
-      // look around for a date string\
-      const window = lines.slice(Math.max(0,i-8), i+8).join(" ");\
-      const m = window.match(/\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+\\d\{1,2\}\\b/i);\
-      if(!m) continue;\
-\
-      const title = t;\
-      const dateText = m[0];\
-      out.push(\{ sport:"UFC", name:title, dateText \});\
-    \}\
-    return out;\
-  \}\
-\
-  // Boxing from box.live: tends to list \'93DATE\'94 lines then fights\
-  function parseBoxLive(text)\{\
-    const out = [];\
-    const lines = text.split("\\n").map(clean).filter(Boolean);\
-\
-    // Look for date like "21 Feb 2026" or "Feb 21 2026"\
-    for (let i=0;i<lines.length;i++)\{\
-      const dateLine = lines[i];\
-      const dm1 = dateLine.match(/\\b(\\d\{1,2\})\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+(\\d\{4\})\\b/i);\
-      const dm2 = dateLine.match(/\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\s+(\\d\{1,2\}),?\\s+(\\d\{4\})\\b/i);\
-\
-      if(!dm1 && !dm2) continue;\
-\
-      const window = lines.slice(i, i+25).join(" | ");\
-      // fight patterns like "Ryan Garcia vs ..."\
-      const fights = window.match(/([A-Z][A-Za-z'.-]+(?:\\s+[A-Z][A-Za-z'.-]+)*)\\s+vs\\.?\\s+([A-Z][A-Za-z'.-]+(?:\\s+[A-Z][A-Za-z'.-]+)*)/g) || [];\
-      for(const f of fights.slice(0,6))\{\
-        out.push(\{ sport:"BOX", name:f, dateText: dm1 ? dm1[0] : dm2[0] \});\
-      \}\
-    \}\
-    return out;\
-  \}\
-\
-  function toISO(dateText)\{\
-    // best-effort parse into a date (no time)\
-    const d = new Date(dateText);\
-    if(!Number.isNaN(d.getTime()))\{\
-      const y = d.getFullYear();\
-      const m = String(d.getMonth()+1).padStart(2,"0");\
-      const da = String(d.getDate()).padStart(2,"0");\
-      return `$\{y\}-$\{m\}-$\{da\}`;\
-    \}\
-    return null;\
-  \}\
-\
-  const [ufcText, boxText] = await Promise.all([fetchText(UFC_URL), fetchText(BOX_URL)]);\
-  const ufc = parseUfc(ufcText).map(e => (\{...e, dayKey: toISO(e.dateText)\})).filter(e=>e.dayKey);\
-  const box = parseBoxLive(boxText).map(e => (\{...e, dayKey: toISO(e.dateText)\})).filter(e=>e.dayKey);\
-\
-  const events = [...ufc, ...box]\
-    .map(e => (\{\
-      sport: e.sport,\
-      name: e.name,\
-      dayKey: e.dayKey,\
-      date: e.dayKey + "T12:00:00Z"\
-    \}))\
-    .filter(e => e.dayKey)\
-    .slice(0,400);\
-\
-  document.body.innerHTML = "<pre>" + JSON.stringify(\{generatedAt:new Date().toISOString(), events\}, null, 2) + "</pre>";\
-\})();\
-</script>}
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Build events.json
+        run: |
+          python - <<'PY'
+          import json, re
+          from datetime import datetime, timedelta, timezone
+          from urllib.request import urlopen, Request
+
+          def http_get(url, headers=None):
+            headers = headers or {}
+            req = Request(url, headers={"User-Agent":"Mozilla/5.0", **headers})
+            with urlopen(req, timeout=30) as r:
+              return r.read().decode("utf-8", "replace")
+
+          def ymd(d): return d.strftime("%Y-%m-%d")
+
+          def parse_ics(ics_text):
+            # unfold lines
+            raw = ics_text.replace("\r\n","\n").split("\n")
+            lines = []
+            for ln in raw:
+              if ln.startswith((" ", "\t")) and lines:
+                lines[-1] += ln.strip()
+              else:
+                lines.append(ln.strip())
+
+            events = []
+            cur = None
+            for ln in lines:
+              if ln == "BEGIN:VEVENT":
+                cur = {}
+                continue
+              if ln == "END:VEVENT":
+                if cur and cur.get("DTSTART") and cur.get("SUMMARY"):
+                  events.append(cur)
+                cur = None
+                continue
+              if cur is None: 
+                continue
+
+              if ":" not in ln:
+                continue
+              key, val = ln.split(":", 1)
+              key = key.split(";", 1)[0].upper().strip()
+              cur[key] = val.strip()
+
+            return events
+
+          def ics_dt_to_iso(dt):
+            # YYYYMMDD or YYYYMMDDTHHMMSSZ or YYYYMMDDTHHMMSS
+            dt = dt.strip()
+            m = re.match(r"^(\d{4})(\d{2})(\d{2})$", dt)
+            if m:
+              # noon UTC to avoid day shift
+              d = datetime(int(m[1]), int(m[2]), int(m[3]), 12, 0, 0, tzinfo=timezone.utc)
+              return d.isoformat().replace("+00:00","Z"), False
+
+            m = re.match(r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$", dt)
+            if m:
+              d = datetime(int(m[1]), int(m[2]), int(m[3]), int(m[4]), int(m[5]), int(m[6]), tzinfo=timezone.utc)
+              return d.isoformat().replace("+00:00","Z"), True
+
+            m = re.match(r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$", dt)
+            if m:
+              d = datetime(int(m[1]), int(m[2]), int(m[3]), int(m[4]), int(m[5]), int(m[6]), tzinfo=timezone.utc)
+              return d.isoformat().replace("+00:00","Z"), True
+
+            return None, False
+
+          def dedupe(items):
+            seen=set(); out=[]
+            for e in items:
+              k=(e["sport"], e["name"], e["dayKey"])
+              if k in seen: 
+                continue
+              seen.add(k)
+              out.append(e)
+            return out
+
+          now = datetime.now(timezone.utc)
+          horizon = now + timedelta(days=180)
+
+          out_events = []
+
+          # UFC (server-side, no CORS issues)
+          try:
+            ufc_ics = http_get("https://www.ufc.com/events/ical")
+            for ev in parse_ics(ufc_ics):
+              iso, has_time = ics_dt_to_iso(ev["DTSTART"])
+              if not iso: 
+                continue
+              d = datetime.fromisoformat(iso.replace("Z","+00:00"))
+              if d < now - timedelta(days=7) or d > horizon:
+                continue
+              out_events.append({
+                "sport": "UFC",
+                "name": ev.get("SUMMARY","").strip(),
+                "date": iso,
+                "hasRealTime": bool(has_time),
+                "venue": ev.get("LOCATION","").strip(),
+                "city": "",
+                "dayKey": ymd(d.astimezone(timezone.utc)),
+                "source": ""  # blank so you don’t see “TheSportsDB”
+              })
+          except Exception as e:
+            # keep going even if UFC fails
+            pass
+
+          # Boxing (SportsDB free endpoint by day)
+          key = "3"
+          d = (now - timedelta(days=2)).date()
+          end = horizon.date()
+          while d <= end:
+            ds = d.isoformat()
+            try:
+              url = f"https://www.thesportsdb.com/api/v1/json/{key}/eventsday.php?d={ds}&s=Boxing"
+              j = json.loads(http_get(url))
+              for ev in (j.get("events") or []):
+                name = (ev.get("strEvent") or "").strip()
+                if not name:
+                  continue
+                out_events.append({
+                  "sport": "BOX",
+                  "name": name,
+                  "date": f"{ds}T12:00:00Z",
+                  "hasRealTime": False,
+                  "venue": (ev.get("strVenue") or "").strip(),
+                  "city": (ev.get("strLocation") or "").strip(),
+                  "dayKey": ds,
+                  "source": ""  # blank so you don’t see “TheSportsDB”
+                })
+            except Exception:
+              pass
+            d += timedelta(days=1)
+
+          out_events = dedupe(out_events)
+          out_events.sort(key=lambda e: e["date"])
+
+          payload = {
+            "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
+            "events": out_events
+          }
+
+          with open("events.json","w",encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+          print(f"Wrote events.json with {len(out_events)} events")
+          PY
+
+      - name: Commit events.json (if changed)
+        run: |
+          git config user.name "bouttime-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add events.json
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "Update events.json"
+          git push

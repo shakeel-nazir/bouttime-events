@@ -1,16 +1,6 @@
 {
-  "generatedAt": "2026-02-28T18:50:41.165853Z",
+  "generatedAt": "2026-03-01T03:24:38.277326Z",
   "events": [
-    {
-      "sport": "BOX",
-      "name": "Melbourne Victory vs Western Sydney Wanderers FC",
-      "date": "2026-02-26T12:00:00Z",
-      "hasRealTime": false,
-      "venue": "",
-      "city": "",
-      "dayKey": "2026-02-26",
-      "source": ""
-    },
     {
       "sport": "BOX",
       "name": "Melbourne Victory vs Western Sydney Wanderers FC",
@@ -299,6 +289,16 @@
       "venue": "",
       "city": "",
       "dayKey": "2026-03-27",
+      "source": ""
+    },
+    {
+      "sport": "BOX",
+      "name": "Melbourne Victory vs Western Sydney Wanderers FC",
+      "date": "2026-03-28T12:00:00Z",
+      "hasRealTime": false,
+      "venue": "",
+      "city": "",
+      "dayKey": "2026-03-28",
       "source": ""
     }
   ]

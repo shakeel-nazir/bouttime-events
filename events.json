@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-31T03:31:11.913950Z",
+  "generatedAt": "2026-03-31T07:46:15.735813Z",
   "events": [
     {
       "sport": "BOX",
@@ -299,6 +299,16 @@
       "venue": "",
       "city": "",
       "dayKey": "2026-04-27",
+      "source": ""
+    },
+    {
+      "sport": "BOX",
+      "name": "Melbourne Victory vs Western Sydney Wanderers FC",
+      "date": "2026-04-28T12:00:00Z",
+      "hasRealTime": false,
+      "venue": "",
+      "city": "",
+      "dayKey": "2026-04-28",
       "source": ""
     }
   ]
